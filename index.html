@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR Susun Kalimat SPOK</title>
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- MediaPipe Hands & Selfie Segmentation -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #87CEEB; /* Sky blue base for fallback */
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        #uiOverlay, #mainMenu {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+        }
+
+        #uiOverlay {
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        #mainMenu {
+            z-index: 30;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .lang-btn {
+            background: rgba(255,255,255,0.15); color: #fff; font-weight: 800;
+            padding: 8px 18px; border-radius: 16px; border: 3px solid rgba(255,255,255,0.6);
+            font-size: 1rem; transition: all .15s; cursor: pointer;
+        }
+        .lang-btn.active { background: #FFD700; color: #1f2937; border-color: #fff; transform: scale(1.08); }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+        }
+        
+        #webcam {
+            display: none; 
+        }
+
+        #loadingScreen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s;
+        }
+        
+        .loader {
+            border: 8px solid rgba(255,255,255,0.3);
+            border-top: 8px solid #FFFFFF;
+            border-radius: 50%;
+            width: 70px;
+            height: 70px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen (Menunggu AI Dimuat) -->
+    <div id="loadingScreen">
+        <div class="loader mb-6"></div>
+        <h2 class="text-3xl font-extrabold text-white drop-shadow-lg text-center px-4">Membangun Taman Pintar...</h2>
+        <p class="text-white mt-3 font-semibold text-lg text-center px-4" id="loadingText">Menyiapkan Kamera dan Kecerdasan Buatan (0/2)</p>
+    </div>
+
+    <!-- Menu Utama -->
+    <div id="mainMenu" class="flex flex-col items-center justify-center p-4 hidden">
+        <h1 class="text-4xl md:text-6xl font-extrabold text-white mb-2 drop-shadow-2xl text-center">Taman Kalimat 📝</h1>
+        <p class="text-lg md:text-xl text-yellow-300 font-bold mb-8 drop-shadow-md text-center max-w-xl">Jepit kata yang melayang dan tarik ke wadah Subjek, Predikat, Objek, dan Keterangan!</p>
+
+        <div class="flex flex-wrap justify-center items-center gap-2 md:gap-3 mb-6">
+            <span class="w-full text-center text-white font-bold text-sm md:text-base drop-shadow">Pilih Bahasa / Language / اللغة</span>
+            <button id="lang-id" onclick="setLang('id')" class="lang-btn active">Indonesia</button>
+            <button id="lang-en" onclick="setLang('en')" class="lang-btn">English</button>
+            <button id="lang-ar" onclick="setLang('ar')" class="lang-btn" style="font-family:'Amiri',serif;font-size:1.2rem">العربية</button>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full max-w-4xl">
+            <button onclick="startGameUI(3, false)" class="bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-bold py-4 md:py-6 px-6 rounded-3xl shadow-[0_8px_0_#2E8B57] hover:shadow-[0_4px_0_#2E8B57] hover:translate-y-1 transition-all text-xl md:text-2xl border-4 border-white">
+                Susun S-P-O
+            </button>
+            <button onclick="startGameUI(3, true)" class="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold py-4 md:py-6 px-6 rounded-3xl shadow-[0_8px_0_#006400] hover:shadow-[0_4px_0_#006400] hover:translate-y-1 transition-all text-xl md:text-2xl border-4 border-white">
+                S-P-O + Pengecoh 🧩
+            </button>
+            <button onclick="startGameUI(4, false)" class="bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white font-bold py-4 md:py-6 px-6 rounded-3xl shadow-[0_8px_0_#0056b3] hover:shadow-[0_4px_0_#0056b3] hover:translate-y-1 transition-all text-xl md:text-2xl border-4 border-white">
+                Susun S-P-O-K
+            </button>
+            <button onclick="startGameUI(4, true)" class="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold py-4 md:py-6 px-6 rounded-3xl shadow-[0_8px_0_#311B92] hover:shadow-[0_4px_0_#311B92] hover:translate-y-1 transition-all text-xl md:text-2xl border-4 border-white">
+                S-P-O-K + Pengecoh 🧩
+            </button>
+            <button onclick="startGameUI('mix', false)" class="bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-4 md:py-6 px-6 rounded-3xl shadow-[0_8px_0_#c2410c] hover:shadow-[0_4px_0_#c2410c] hover:translate-y-1 transition-all text-xl md:text-2xl border-4 border-white">
+                🌀 Campuran (S-P-O &amp; S-P-O-K)
+            </button>
+            <button onclick="startGameUI('mix', true)" class="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold py-4 md:py-6 px-6 rounded-3xl shadow-[0_8px_0_#9f1239] hover:shadow-[0_4px_0_#9f1239] hover:translate-y-1 transition-all text-xl md:text-2xl border-4 border-white">
+                🌀 Campuran + Pengecoh 🧩
+            </button>
+        </div>
+    </div>
+
+    <!-- Video Element (Tersembunyi, diproses di Canvas) -->
+    <video id="webcam" autoplay playsinline></video>
+    
+    <!-- Canvas Game Utama -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay (Skor & Indikator Tangan) -->
+    <div id="uiOverlay" class="p-4 md:p-6 hidden">
+        <div class="flex justify-between items-start">
+            <div id="scoreBoard" class="glass-panel rounded-2xl p-3 md:p-4 text-gray-900 pointer-events-auto">
+                <h1 class="text-lg md:text-2xl font-black mb-1 drop-shadow-sm" id="modeTitle">Susun Kalimat SPOK</h1>
+                <p class="text-base md:text-lg font-bold text-green-800 drop-shadow-sm">Skor: <span id="scoreDisplay" class="text-xl">0 / 10</span></p>
+                <button onclick="backToMenu()" class="mt-2 text-sm bg-red-500 text-white px-3 py-1 rounded-lg font-bold shadow hover:bg-red-600 w-full">Kembali</button>
+            </div>
+            
+            <div class="flex flex-col items-end gap-2">
+                <div id="statusIndicator" class="glass-panel rounded-full px-4 py-2 text-gray-900 text-xs md:text-sm font-bold flex items-center gap-2 transition-opacity duration-300">
+                    <span class="animate-bounce text-xl">✋</span> Tunjukkan Tanganmu!
+                </div>
+                <!-- Tombol Dengar Benda (Bahasa Indonesia) -->
+                <button onclick="speakCurrentTargets()" 
+                    class="pointer-events-auto glass-panel rounded-full px-4 py-2 text-gray-900 text-sm md:text-base font-bold flex items-center gap-2 hover:bg-yellow-300 hover:text-black transition-all active:scale-95 select-none"
+                    title="Dengar lagi">
+                    🔊 <span class="hidden md:inline">Petunjuk</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const videoElement = document.getElementById('webcam');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const loadingScreen = document.getElementById('loadingScreen');
+        const loadingText = document.getElementById('loadingText');
+        const mainMenu = document.getElementById('mainMenu');
+        const uiOverlay = document.getElementById('uiOverlay');
+
+        const personCanvas = document.createElement('canvas');
+        const personCtx = personCanvas.getContext('2d');
+
+        // Bank Kalimat SPOK (Subjek, Predikat, Objek, Keterangan)
+        const spokRoles = [
+            { key: 'S', label: 'SUBJEK',     color: '#E63946' },
+            { key: 'P', label: 'PREDIKAT',   color: '#1D6FDB' },
+            { key: 'O', label: 'OBJEK',      color: '#2BA84A' },
+            { key: 'K', label: 'KETERANGAN', color: '#F28C1B' }
+        ];
+
+        const spokSentences = [
+            { emoji: "🌾🌱", S: "Petani",     P: "menanam",     O: "padi",              K: "di sawah" },
+            { emoji: "🍳🍚", S: "Ibu",        P: "memasak",     O: "nasi goreng",       K: "di dapur" },
+            { emoji: "🎣🐟", S: "Nelayan",    P: "menjaring",   O: "ikan",              K: "di laut" },
+            { emoji: "📚🏫", S: "Siswa",      P: "membaca",     O: "buku cerita",       K: "di perpustakaan" },
+            { emoji: "✏️📋", S: "Bu Guru",    P: "menulis",     O: "soal",              K: "di papan tulis" },
+            { emoji: "🚲🔧", S: "Ayah",       P: "memperbaiki", O: "sepeda",            K: "di garasi" },
+            { emoji: "🐱🐭", S: "Kucing",     P: "mengejar",    O: "tikus",             K: "di gudang" },
+            { emoji: "🐦🌳", S: "Burung",     P: "membuat",     O: "sarang",            K: "di pohon" },
+            { emoji: "🥛🍽️", S: "Adik",       P: "minum",       O: "susu",              K: "di ruang makan" },
+            { emoji: "🌷💧", S: "Kakak",      P: "menyiram",    O: "bunga",             K: "di taman" },
+            { emoji: "🩺🏥", S: "Dokter",     P: "memeriksa",   O: "pasien",            K: "di klinik" },
+            { emoji: "🚦🚓", S: "Polisi",     P: "mengatur",    O: "lalu lintas",       K: "di perempatan jalan" },
+            { emoji: "🍊⚖️", S: "Pedagang",   P: "menimbang",   O: "jeruk",             K: "di pasar" },
+            { emoji: "🧶🧣", S: "Nenek",      P: "merajut",     O: "syal",              K: "di teras rumah" },
+            { emoji: "🪑🔨", S: "Tukang kayu", P: "membuat",    O: "kursi",             K: "di bengkel kayu" },
+            { emoji: "🐄🌿", S: "Sapi",       P: "memakan",     O: "rumput",            K: "di padang" },
+            { emoji: "⚽🏟️", S: "Andi",       P: "menendang",   O: "bola",              K: "di lapangan sekolah" },
+            { emoji: "🎨🖼️", S: "Siti",       P: "melukis",     O: "pemandangan",       K: "di ruang kelas" },
+            { emoji: "🧹🌅", S: "Pak Ahmad",  P: "menyapu",     O: "halaman sekolah",   K: "setiap pagi" },
+            { emoji: "🚩🌤️", S: "Kami",       P: "mengibarkan", O: "bendera",           K: "di lapangan upacara" },
+            { emoji: "👕🧼", S: "Bibi",       P: "mencuci",     O: "pakaian",           K: "di halaman belakang" },
+            { emoji: "🐸🦟", S: "Katak",      P: "menangkap",   O: "serangga",          K: "di kolam" }
+        ];
+
+        // Terjemahan (urutan sama dengan spokSentences): [S, P, O, K]
+        const spokTranslations = {
+            en: [
+                ["The farmer", "plants", "rice", "in the field"],
+                ["Mother", "cooks", "fried rice", "in the kitchen"],
+                ["The fisherman", "catches", "fish", "in the sea"],
+                ["The student", "reads", "a storybook", "in the library"],
+                ["The teacher", "writes", "a question", "on the whiteboard"],
+                ["Father", "fixes", "the bicycle", "in the garage"],
+                ["The cat", "chases", "the mouse", "in the storeroom"],
+                ["The bird", "builds", "a nest", "in the tree"],
+                ["Little brother", "drinks", "milk", "in the dining room"],
+                ["Sister", "waters", "the flowers", "in the garden"],
+                ["The doctor", "examines", "the patient", "in the clinic"],
+                ["The policeman", "directs", "the traffic", "at the crossroads"],
+                ["The seller", "weighs", "oranges", "at the market"],
+                ["Grandmother", "knits", "a scarf", "on the porch"],
+                ["The carpenter", "makes", "a chair", "in the woodshop"],
+                ["The cow", "eats", "grass", "in the meadow"],
+                ["Andi", "kicks", "the ball", "on the school field"],
+                ["Siti", "paints", "a landscape", "in the classroom"],
+                ["Mr. Ahmad", "sweeps", "the schoolyard", "every morning"],
+                ["We", "raise", "the flag", "on the parade ground"],
+                ["Aunt", "washes", "clothes", "in the backyard"],
+                ["The frog", "catches", "insects", "in the pond"]
+            ],
+            ar: [
+                ["الفلاح", "يزرع", "الأرز", "في الحقل"],
+                ["الأم", "تطبخ", "الأرز المقلي", "في المطبخ"],
+                ["الصياد", "يصطاد", "السمك", "في البحر"],
+                ["الطالب", "يقرأ", "كتاب القصة", "في المكتبة"],
+                ["المعلمة", "تكتب", "السؤال", "على السبورة"],
+                ["الأب", "يصلح", "الدراجة", "في المرآب"],
+                ["القط", "يطارد", "الفأر", "في المخزن"],
+                ["العصفور", "يبني", "العش", "على الشجرة"],
+                ["الأخ الصغير", "يشرب", "الحليب", "في غرفة الطعام"],
+                ["الأخت", "تسقي", "الزهور", "في الحديقة"],
+                ["الطبيب", "يفحص", "المريض", "في العيادة"],
+                ["الشرطي", "ينظم", "المرور", "في تقاطع الطريق"],
+                ["التاجر", "يزن", "البرتقال", "في السوق"],
+                ["الجدة", "تحيك", "الوشاح", "في شرفة البيت"],
+                ["النجار", "يصنع", "الكرسي", "في ورشة الخشب"],
+                ["البقرة", "تأكل", "العشب", "في المرعى"],
+                ["أندي", "يركل", "الكرة", "في ملعب المدرسة"],
+                ["سيتي", "ترسم", "المنظر الطبيعي", "في الفصل"],
+                ["السيد أحمد", "يكنس", "ساحة المدرسة", "كل صباح"],
+                ["نحن", "نرفع", "العلم", "في ساحة الطابور"],
+                ["العمة", "تغسل", "الملابس", "في الفناء الخلفي"],
+                ["الضفدع", "يصطاد", "الحشرات", "في البركة"]
+            ]
+        };
+
+        const roleText = {
+            id: { labels: ['SUBJEK', 'PREDIKAT', 'OBJEK', 'KETERANGAN'], letters: ['S', 'P', 'O', 'K'] },
+            en: { labels: ['SUBJECT', 'PREDICATE', 'OBJECT', 'ADVERBIAL'], letters: ['S', 'P', 'O', 'A'] },
+            ar: { labels: ['الفاعل', 'الفعل', 'المفعول به', 'الظرف'], letters: ['١', '٢', '٣', '٤'] }
+        };
+
+        const uiText = {
+            id: { hint: 'Susun kalimatnya!', speak: 'Susun kata menjadi kalimat dengan urutan ', tts: 'id-ID' },
+            en: { hint: 'Build the sentence!', speak: 'Arrange the words into a sentence in this order: ', tts: 'en-US' },
+            ar: { hint: 'رتّب الجملة!', speak: 'رتب الكلمات لتكوين جملة بهذا الترتيب: ', tts: 'ar-SA' }
+        };
+
+        let currentLang = 'id';
+        let currentBank = spokSentences;
+
+        function textFont() { return currentLang === 'ar' ? '"Amiri", serif' : 'Inter, sans-serif'; }
+
+        function getBank(lang) {
+            if (lang === 'id') return spokSentences;
+            return spokSentences.map((s, i) => {
+                const tr = spokTranslations[lang][i];
+                return { emoji: s.emoji, S: tr[0], P: tr[1], O: tr[2], K: tr[3] };
+            });
+        }
+
+        function setLang(l) {
+            currentLang = l;
+            currentBank = getBank(l);
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.id === 'lang-' + l));
+        }
+
+        // Zona layar: area melayang (atas) dan zona wadah (bawah)
+        let floatTop = 70, floatBottom = 400, slotZoneTop = 0;
+
+        let questionsOrder = []; // Array of Arrays (Setiap elemen adalah daftar benda di ronde tersebut)
+        let currentTargetIndex = 0;
+        let score = 0;
+        let maxQuestions = 10; 
+        let gameState = 'initializing'; 
+        let isTransitioning = false;
+        
+        let bubbles = [];
+        let targetSlots = []; // Wadah gabungan (Gambar + Bahasa Indonesia)
+        let particles = [];
+        let clouds = [];
+        
+        // AI Trackers
+        let currentHandLandmarks = null; 
+        let currentSegmentationMask = null;
+        let aiModelsLoaded = 0; 
+        
+        let input = { x: 0, y: 0, isPinching: false, wasPinching: false, isHandDetected: false, cursorState: 'normal' };
+        let grabbedBubble = null;
+        let currentSelectedChallenge = false;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let audioUnlocked = false;
+
+        let ttsReady = false;
+
+        if (typeof speechSynthesis !== 'undefined') {
+            speechSynthesis.onvoiceschanged = () => { ttsReady = true; };
+            ttsReady = true;
+        }
+
+        // Ucapkan teks
+        function speakText(text, lang = 'id-ID', rate = 0.8) {
+            if (!ttsReady || !window.speechSynthesis) return;
+            window.speechSynthesis.cancel();
+            
+            const utter = new SpeechSynthesisUtterance(text);
+            const voices = window.speechSynthesis.getVoices();
+            let voice = null;
+            
+            if (lang === 'ar-SA') {
+                // Coba cari suara bahasa arab, jika tidak ada fallback ke default/english agar tidak crash
+                voice = voices.find(v => v.lang.startsWith('ar'));
+                if (!voice) return;
+            } else if (lang === 'en-US') {
+                voice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+            } else {
+                voice = voices.find(v => v.lang.startsWith('id') && /female|wanita/i.test(v.name)) ||
+                        voices.find(v => v.lang.startsWith('id')) || voices[0];
+            }
+
+            utter.voice = voice;
+            utter.lang = voice ? voice.lang : lang;
+            utter.rate = rate;
+            utter.pitch = 1.3;
+            window.speechSynthesis.speak(utter);
+        }
+
+        // Tombol 🔊: Petunjuk urutan unsur kalimat
+        function speakCurrentTargets() {
+            if (gameState !== 'playing' || questionsOrder.length === 0) return;
+            const q = questionsOrder[currentTargetIndex];
+            const labels = q.parts.map(p => currentLang === 'ar' ? p.label : p.label.charAt(0) + p.label.slice(1).toLowerCase());
+            const ui = uiText[currentLang];
+            speakText(ui.speak + labels.join(currentLang === 'ar' ? '، ' : ', ') + ".", ui.tts, 0.85);
+        }
+
+        function playSound(type) {
+            if(audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            
+            if (type === 'pop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(500, now);
+                osc.frequency.exponentialRampToValueAtTime(900, now + 0.1);
+                gainNode.gain.setValueAtTime(0.4, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'drop') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+                osc.frequency.linearRampToValueAtTime(1400, now + 0.2);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            } else if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554.37, now + 0.1);
+                osc.frequency.setValueAtTime(659.25, now + 0.2);
+                osc.frequency.setValueAtTime(880, now + 0.3);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(250, now);
+                osc.frequency.linearRampToValueAtTime(150, now + 0.3);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            }
+        }
+
+        function drawRoundedRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.arcTo(x + width, y, x + width, y + height, radius);
+            ctx.arcTo(x + width, y + height, x, y + height, radius);
+            ctx.arcTo(x, y + height, x, y, radius);
+            ctx.arcTo(x, y, x + width, y, radius);
+            ctx.closePath();
+        }
+
+        class Cloud {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * (canvas.height * 0.4);
+                this.speed = Math.random() * 0.6 + 0.2;
+                this.size = Math.random() * 30 + 40;
+            }
+            update() {
+                this.x += this.speed;
+                if (this.x > canvas.width + this.size * 3) {
+                    this.x = -this.size * 3;
+                    this.y = Math.random() * (canvas.height * 0.4);
+                }
+            }
+            draw(ctx) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.arc(this.x + this.size * 0.7, this.y - this.size * 0.3, this.size * 0.8, 0, Math.PI * 2);
+                ctx.arc(this.x + this.size * 1.4, this.y, this.size * 0.9, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        for (let i=0; i<6; i++) clouds.push(new Cloud());
+
+        function wrapLines(text, font, maxW) {
+            ctx.font = font;
+            const words = text.split(' ');
+            const lines = [];
+            let line = '';
+            for (const w of words) {
+                const test = line ? line + ' ' + w : w;
+                if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+                else line = test;
+            }
+            if (line) lines.push(line);
+            return lines;
+        }
+
+        // Cari ukuran font terbesar agar teks muat di dalam kotak
+        function fitText(text, boxW, boxH, maxPx, minPx) {
+            let result = null;
+            for (let px = maxPx; px >= minPx; px--) {
+                const font = `bold ${px}px ${textFont()}`;
+                const lines = wrapLines(text, font, boxW);
+                const lineH = px * 1.2;
+                const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+                result = { font, lines, lineH, px };
+                if (lines.length * lineH <= boxH && widest <= boxW) break;
+            }
+            return result;
+        }
+
+        // Potongan kalimat yang melayang (persegi panjang sudut bulat, sama seperti wadah)
+        class Piece {
+            constructor(text, role, isDecoy = false) {
+                this.text = text;
+                this.role = role;
+                this.isDecoy = isDecoy;
+                this.color = isDecoy ? '#636E72' : '#0984E3';
+
+                const px = (canvas.width < 600 ? 20 : 26) + (currentLang === 'ar' ? 4 : 0);
+                this.font = `bold ${px}px ${textFont()}`;
+                this.lineH = px * 1.25;
+                this.lines = wrapLines(text, this.font, Math.min(canvas.width * 0.42, 300));
+                ctx.font = this.font;
+                const textW = Math.max(...this.lines.map(l => ctx.measureText(l).width));
+                this.w = textW + 44;
+                this.h = this.lines.length * this.lineH + 26;
+                this.r = Math.min(22, this.h / 2);
+
+                const minX = this.w / 2, maxX = Math.max(minX, canvas.width - this.w / 2);
+                const minY = floatTop + this.h / 2, maxY = Math.max(minY, floatBottom - this.h / 2);
+                this.x = minX + Math.random() * (maxX - minX);
+                this.y = minY + Math.random() * (maxY - minY);
+                this.vx = (Math.random() - 0.5) * 4;
+                this.vy = (Math.random() - 0.5) * 4;
+                this.isGrabbed = false;
+                this.floatOffset = Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                if (this.isGrabbed) return;
+                this.floatOffset += 0.05;
+                this.x += this.vx;
+                this.y += this.vy + Math.sin(this.floatOffset) * 1.0;
+
+                const hw = this.w / 2, hh = this.h / 2;
+                if (this.x < hw) { this.x = hw; this.vx = Math.abs(this.vx); }
+                else if (this.x > canvas.width - hw) { this.x = canvas.width - hw; this.vx = -Math.abs(this.vx); }
+
+                const top = floatTop + hh;
+                const bottom = Math.max(top, floatBottom - hh);
+                if (this.y < top) { this.y = top; this.vy = Math.abs(this.vy); }
+                else if (this.y > bottom) { this.y = bottom; this.vy = -Math.abs(this.vy); }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 12;
+                ctx.shadowOffsetY = 6;
+
+                drawRoundedRect(ctx, this.x - this.w / 2, this.y - this.h / 2, this.w, this.h, this.r);
+                ctx.fillStyle = this.isDecoy ? '#DFE6E9' : '#FFFFFF';
+                ctx.fill();
+
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = this.isGrabbed ? '#FFD700' : (this.isDecoy ? '#B2BEC3' : this.color);
+                ctx.stroke();
+
+                ctx.shadowColor = 'transparent';
+                ctx.fillStyle = this.isDecoy ? '#2D3436' : '#111111';
+                ctx.font = this.font;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const startY = this.y - (this.lines.length - 1) * this.lineH / 2;
+                this.lines.forEach((l, i) => ctx.fillText(l, this.x, startY + i * this.lineH));
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y; this.color = color;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 10 + 4;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.03 + 0.015;
+                this.size = Math.random() * 12 + 5;
+            }
+            update() { this.x += this.vx; this.y += this.vy; this.life -= this.decay; }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        function createSlots(q) {
+            const n = q.parts.length;
+            const margin = 14, gap = 14;
+            const avail = canvas.width - margin * 2;
+
+            // Satu baris jika muat, jika sempit jadi 2 kolom
+            let cols = n;
+            let slotW = (avail - gap * (cols - 1)) / cols;
+            if (slotW < 150) { cols = 2; slotW = (avail - gap) / 2; }
+            slotW = Math.min(slotW, 260);
+
+            const rows = Math.ceil(n / cols);
+            const slotH = Math.max(86, Math.min(130, canvas.height * 0.15));
+            const totalH = rows * slotH + (rows - 1) * gap;
+            const startY = canvas.height - totalH - 24;
+
+            slotZoneTop = startY;
+            floatTop = 70;
+            floatBottom = Math.max(floatTop + 140, startY - 76); // sisakan ruang untuk banner kalimat
+
+            const oldSlots = [...targetSlots];
+            targetSlots = [];
+
+            q.parts.forEach((part, i) => {
+                const row = Math.floor(i / cols), col = i % cols;
+                const inRow = Math.min(cols, n - row * cols);
+                const rowW = inRow * slotW + (inRow - 1) * gap;
+                const x0 = (canvas.width - rowW) / 2;
+                targetSlots.push({
+                    role: part.key,
+                    letter: part.letter,
+                    label: part.label,
+                    color: part.color,
+                    text: part.text,
+                    x: x0 + (currentLang === 'ar' ? (inRow - 1 - col) : col) * (slotW + gap),
+                    y: startY + row * (slotH + gap),
+                    w: slotW,
+                    h: slotH,
+                    isFilled: oldSlots[i] ? oldSlots[i].isFilled : false,
+                    fit: null
+                });
+            });
+        }
+
+        function loadQuestion(index) {
+            const q = questionsOrder[index];
+            bubbles = []; particles = []; isTransitioning = false;
+            targetSlots = [];
+
+            createSlots(q); // dulu, supaya batas area melayang sudah diketahui
+
+            // Potongan kalimat yang benar
+            q.parts.forEach(p => bubbles.push(new Piece(p.text, p.key, false)));
+
+            // Pengecoh: potongan dari kalimat lain
+            if (currentSelectedChallenge) {
+                const decoyCount = q.parts.length === 3 ? 3 : 2;
+                const used = new Set(q.parts.map(p => p.text));
+                const pool = [];
+                currentBank.forEach(s => {
+                    if (s === q.source) return;
+                    ['S', 'P', 'O', 'K'].forEach(k => {
+                        if (!used.has(s[k]) && !pool.includes(s[k])) pool.push(s[k]);
+                    });
+                });
+                pool.sort(() => Math.random() - 0.5);
+                for (let i = 0; i < decoyCount && i < pool.length; i++) {
+                    bubbles.push(new Piece(pool[i], null, true));
+                }
+            }
+
+            bubbles.sort(() => Math.random() - 0.5);
+            speakCurrentTargets();
+        }
+
+        function spawnParticles(x, y, color) {
+            const pColor = (color === '#FFFFFF') ? '#FFD700' : color;
+            for(let i = 0; i < 40; i++) particles.push(new Particle(x, y, pColor));
+        }
+
+        function hitPiece(b, x, y, pad) {
+            return Math.abs(x - b.x) < b.w / 2 + pad && Math.abs(y - b.y) < b.h / 2 + pad;
+        }
+
+        function slotAt(x, y) {
+            const pad = 20;
+            return targetSlots.find(s => x > s.x - pad && x < s.x + s.w + pad && y > s.y - pad && y < s.y + s.h + pad) || null;
+        }
+
+        function checkCollisions() {
+            input.cursorState = 'normal';
+            if (gameState !== 'playing' || isTransitioning) return;
+
+            // Hover
+            if (!grabbedBubble) {
+                for (let b of bubbles) {
+                    if (hitPiece(b, input.x, input.y, 30)) { input.cursorState = 'hover'; break; }
+                }
+            }
+
+            // Jepit (Pinch)
+            if (input.isPinching && !input.wasPinching && !grabbedBubble) {
+                for (let i = bubbles.length - 1; i >= 0; i--) {
+                    const b = bubbles[i];
+                    if (hitPiece(b, input.x, input.y, 40)) {
+                        grabbedBubble = b;
+                        b.isGrabbed = true;
+                        playSound('pop');
+                        break;
+                    }
+                }
+            }
+
+            // Tarik (Drag)
+            if (input.isPinching && grabbedBubble) {
+                grabbedBubble.x += (input.x - grabbedBubble.x) * 0.5;
+                grabbedBubble.y += (input.y - grabbedBubble.y) * 0.5;
+                input.cursorState = 'hover';
+            }
+
+            // Lepas (Drop)
+            if (!input.isPinching && input.wasPinching && grabbedBubble) {
+                const p = grabbedBubble;
+                const slot = slotAt(p.x, p.y);
+
+                if (p.isDecoy) {
+                    if (slot) {
+                        playSound('error');
+                        spawnParticles(p.x, p.y, '#FF3B30');
+                        p.vx = (Math.random() - 0.5) * 15;
+                        p.vy = -12;
+                        input.cursorState = 'miss';
+                    } else {
+                        p.vy = 5;
+                        input.cursorState = 'normal';
+                    }
+                    p.isGrabbed = false;
+                    grabbedBubble = null;
+                    return;
+                }
+
+                let snapped = false;
+                if (slot) {
+                    if (!slot.isFilled && p.role === slot.role && p.text === slot.text) {
+                        // Benar!
+                        snapped = true;
+                        slot.isFilled = true;
+                        playSound('drop');
+                        spawnParticles(slot.x + slot.w / 2, slot.y + slot.h / 2, slot.color);
+                        bubbles = bubbles.filter(b => b !== p);
+                        if (!targetSlots.every(s => s.isFilled)) speakText(slot.text, uiText[currentLang].tts, 0.85);
+                    } else {
+                        // Salah wadah
+                        playSound('error');
+                        input.cursorState = 'miss';
+                        spawnParticles(p.x, p.y, '#FF3B30');
+                    }
+                }
+
+                if (!snapped) p.vy = 5;
+                p.isGrabbed = false;
+                grabbedBubble = null;
+                input.cursorState = 'normal';
+
+                // Semua wadah terisi = kalimat selesai
+                if (targetSlots.every(s => s.isFilled) && !isTransitioning) {
+                    isTransitioning = true;
+                    score++;
+                    document.getElementById('scoreDisplay').innerText = `${score} / ${questionsOrder.length}`;
+                    playSound('success');
+                    speakText(questionsOrder[currentTargetIndex].sentence, uiText[currentLang].tts, 0.85);
+
+                    targetSlots.forEach(s => spawnParticles(s.x + s.w / 2, s.y + s.h / 2, s.color));
+
+                    setTimeout(() => {
+                        currentTargetIndex++;
+                        if (currentTargetIndex >= questionsOrder.length) {
+                            gameState = 'game_over';
+                            uiOverlay.classList.add('hidden');
+                        } else {
+                            loadQuestion(currentTargetIndex);
+                        }
+                    }, 3500);
+                }
+            }
+        }
+
+        function drawVirtualGarden() {
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.7);
+            skyGrad.addColorStop(0, '#4facfe');
+            skyGrad.addColorStop(1, '#00f2fe');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(canvas.width * 0.85, canvas.height * 0.15, 70, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+            ctx.beginPath();
+            ctx.arc(canvas.width * 0.85, canvas.height * 0.15, 110, 0, Math.PI * 2);
+            ctx.fill();
+
+            clouds.forEach(c => { c.update(); c.draw(ctx); });
+
+            ctx.fillStyle = '#2ECC71';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            ctx.lineTo(0, canvas.height * 0.55);
+            ctx.quadraticCurveTo(canvas.width * 0.4, canvas.height * 0.4, canvas.width, canvas.height * 0.6);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.fill();
+
+            ctx.fillStyle = '#27AE60';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height);
+            ctx.lineTo(canvas.width * 0.1, canvas.height * 0.65);
+            ctx.quadraticCurveTo(canvas.width * 0.6, canvas.height * 0.55, canvas.width, canvas.height * 0.7);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.fill();
+        }
+
+        function drawBanner(q) {
+            const allDone = targetSlots.length > 0 && targetSlots.every(s => s.isFilled);
+            const cy = slotZoneTop - 38;
+            ctx.save();
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetY = 4;
+
+            if (allDone) {
+                // Kalimat lengkap
+                const fit = fitText(q.sentence, canvas.width - 80, 40, 30, 14);
+                ctx.font = fit.font;
+                const tw = Math.max(...fit.lines.map(l => ctx.measureText(l).width));
+                const bw = Math.min(canvas.width - 20, tw + 48);
+                const bh = fit.lines.length * fit.lineH + 22;
+                drawRoundedRect(ctx, canvas.width / 2 - bw / 2, cy - bh / 2, bw, bh, 20);
+                ctx.fillStyle = '#27AE60';
+                ctx.fill();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.stroke();
+                ctx.shadowColor = 'transparent';
+                ctx.fillStyle = '#FFFFFF';
+                ctx.textAlign = 'center';
+                const sy = cy - (fit.lines.length - 1) * fit.lineH / 2;
+                fit.lines.forEach((l, i) => ctx.fillText(l, canvas.width / 2, sy + i * fit.lineH));
+            } else {
+                // Petunjuk gambar
+                const label = uiText[currentLang].hint;
+                ctx.font = '30px Arial';
+                const ew = ctx.measureText(q.emoji).width;
+                ctx.font = `bold 20px ${textFont()}`;
+                const lw = ctx.measureText(label).width;
+                const bw = ew + 14 + lw + 36, bh = 52;
+                drawRoundedRect(ctx, canvas.width / 2 - bw / 2, cy - bh / 2, bw, bh, 20);
+                ctx.fillStyle = 'rgba(255,255,255,0.88)';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#FFD700';
+                ctx.stroke();
+                ctx.shadowColor = 'transparent';
+                ctx.textAlign = 'left';
+                const x0 = canvas.width / 2 - bw / 2 + 18;
+                ctx.font = '30px Arial';
+                ctx.fillText(q.emoji, x0, cy + 2);
+                ctx.fillStyle = '#333333';
+                ctx.font = `bold 20px ${textFont()}`;
+                ctx.fillText(label, x0 + ew + 14, cy);
+            }
+            ctx.restore();
+        }
+
+        function drawInlineLayout() {
+            if (questionsOrder.length === 0) return;
+            drawBanner(questionsOrder[currentTargetIndex]);
+
+            targetSlots.forEach((slot, idx) => {
+                const bob = (isTransitioning && slot.isFilled) ? Math.sin(Date.now() / 150 + idx) * 5 : 0;
+                const sy = slot.y + bob;
+                const r = Math.min(26, slot.h * 0.28);
+                const cx = slot.x + slot.w / 2;
+
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetY = 5;
+
+                // Wadah: persegi panjang sudut bulat
+                ctx.fillStyle = slot.isFilled ? slot.color : 'rgba(255, 255, 255, 0.9)';
+                drawRoundedRect(ctx, slot.x, sy, slot.w, slot.h, r);
+                ctx.fill();
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = slot.isFilled ? '#FFFFFF' : slot.color;
+                ctx.stroke();
+                ctx.shadowColor = 'transparent';
+
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                if (slot.isFilled) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                    ctx.font = `bold ${currentLang === 'ar' ? 16 : 13}px ${textFont()}`;
+                    ctx.fillText(slot.label, cx, sy + 17);
+
+                    if (!slot.fit) slot.fit = fitText(slot.text, slot.w - 28, slot.h - 44, 28, 12);
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = slot.fit.font;
+                    const midY = sy + 30 + (slot.h - 38) / 2;
+                    const startY = midY - (slot.fit.lines.length - 1) * slot.fit.lineH / 2;
+                    slot.fit.lines.forEach((l, i) => ctx.fillText(l, cx, startY + i * slot.fit.lineH));
+                } else {
+                    // Garis putus-putus area tempat kata harus masuk
+                    ctx.globalAlpha = 0.5;
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([10, 8]);
+                    ctx.strokeStyle = slot.color;
+                    drawRoundedRect(ctx, slot.x + 10, sy + 10, slot.w - 20, slot.h - 20, Math.max(8, r - 8));
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.globalAlpha = 1;
+
+                    ctx.fillStyle = slot.color;
+                    ctx.font = `900 ${Math.floor(slot.h * 0.38)}px Inter, sans-serif`;
+                    ctx.fillText(slot.letter, cx, sy + slot.h * 0.40);
+                    ctx.font = `bold ${(slot.h < 100 ? 14 : 17) + (currentLang === 'ar' ? 3 : 0)}px ${textFont()}`;
+                    ctx.fillText(slot.label, cx, sy + slot.h * 0.76);
+                }
+                ctx.restore();
+            });
+        }
+
+        function drawHandSkeleton(landmarks) {
+            if (!landmarks) return;
+            const connections = [
+                [0,1], [1,2], [2,3], [3,4],
+                [0,5], [5,6], [6,7], [7,8],
+                [5,9], [9,10], [10,11], [11,12],
+                [9,13], [13,14], [14,15], [15,16],
+                [13,17], [17,18], [18,19], [19,20],
+                [0,17], [5,9], [9,13], [13,17] 
+            ];
+            
+            ctx.save();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; 
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 5;
+            
+            connections.forEach(conn => {
+                const p1 = landmarks[conn[0]];
+                const p2 = landmarks[conn[1]];
+                ctx.beginPath();
+                ctx.moveTo((1 - p1.x) * canvas.width, p1.y * canvas.height);
+                ctx.lineTo((1 - p2.x) * canvas.width, p2.y * canvas.height);
+                ctx.stroke();
+            });
+
+            ctx.fillStyle = '#34C759';
+            landmarks.forEach(p => {
+                ctx.beginPath();
+                ctx.arc((1 - p.x) * canvas.width, p.y * canvas.height, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+            ctx.restore();
+        }
+
+        function drawCursor() {
+            if (input.x === 0 && input.y === 0) return;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(input.x, input.y, 15, 0, Math.PI * 2);
+            
+            if (input.cursorState === 'miss') {
+                ctx.fillStyle = 'rgba(255, 59, 48, 0.6)';
+                ctx.strokeStyle = '#FF3B30';
+            } else if (input.cursorState === 'hover') {
+                ctx.fillStyle = 'rgba(255, 204, 0, 0.5)';
+                ctx.strokeStyle = '#FFD700';
+                ctx.setLineDash([5, 5]);
+            } else { 
+                ctx.fillStyle = 'rgba(0, 122, 255, 0.5)';
+                ctx.strokeStyle = '#007AFF';
+            }
+            ctx.lineWidth = 3;
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(input.x, input.y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawLoop() {
+            ctx.direction = currentLang === 'ar' ? 'rtl' : 'ltr';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawVirtualGarden();
+            
+            if (videoElement.readyState === 4) {
+                const vidAspect = videoElement.videoWidth / videoElement.videoHeight;
+                const canAspect = canvas.width / canvas.height;
+                let drawW = canvas.width; let drawH = canvas.height;
+                let drawX = 0; let drawY = 0;
+
+                if (vidAspect > canAspect) {
+                    drawW = canvas.height * vidAspect;
+                    drawX = (drawW - canvas.width) / 2;
+                } else {
+                    drawH = canvas.width / vidAspect;
+                    drawY = (drawH - canvas.height) / 2;
+                }
+
+                if (currentSegmentationMask) {
+                    personCanvas.width = canvas.width;
+                    personCanvas.height = canvas.height;
+                    personCtx.clearRect(0, 0, personCanvas.width, personCanvas.height);
+
+                    personCtx.save();
+                    personCtx.translate(personCanvas.width, 0);
+                    personCtx.scale(-1, 1);
+                    
+                    personCtx.globalCompositeOperation = 'source-over';
+                    personCtx.drawImage(currentSegmentationMask, -drawX, -drawY, drawW, drawH);
+                    
+                    personCtx.globalCompositeOperation = 'source-in';
+                    personCtx.drawImage(videoElement, -drawX, -drawY, drawW, drawH);
+                    personCtx.restore(); 
+
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.drawImage(personCanvas, 0, 0);
+                } else {
+                    ctx.save();
+                    ctx.translate(canvas.width, 0);
+                    ctx.scale(-1, 1);
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.globalAlpha = 0.2; 
+                    ctx.drawImage(videoElement, -drawX, -drawY, drawW, drawH);
+                    ctx.restore();
+                }
+            }
+
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1.0;
+
+            if (gameState === 'playing') {
+                drawHandSkeleton(currentHandLandmarks);
+                checkCollisions();
+                drawInlineLayout();
+
+                bubbles.forEach(b => {
+                    b.update();
+                    b.draw(ctx);
+                });
+            } else if (gameState === 'game_over') {
+                ctx.fillStyle = 'rgba(0,0,0,0.85)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                let titleFont = canvas.width > 600 ? '72px' : '48px';
+                let subtitleFont = canvas.width > 600 ? '28px' : '20px';
+                
+                ctx.fillStyle = '#FFD700';
+                ctx.font = `bold ${titleFont} Inter`;
+                ctx.textAlign = 'center';
+                ctx.fillText("Maa Syaa Allah! 🌟", canvas.width/2, canvas.height/2 - 20);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${subtitleFont} Inter`;
+                ctx.fillText("Kamu Hebat Menyusun Kalimat!", canvas.width/2, canvas.height/2 + 40);
+
+                ctx.fillStyle = '#34C759';
+                drawRoundedRect(ctx, canvas.width/2 - 100, canvas.height/2 + 90, 200, 60, 20);
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 24px Inter';
+                ctx.fillText("Main Lagi", canvas.width/2, canvas.height/2 + 128);
+
+                if (input.isPinching && !input.wasPinching) {
+                     let clickX = input.x; let clickY = input.y;
+                     if(clickX > canvas.width/2 - 100 && clickX < canvas.width/2 + 100 &&
+                        clickY > canvas.height/2 + 90 && clickY < canvas.height/2 + 150) {
+                            backToMenu();
+                     }
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw(ctx);
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            if (gameState === 'playing') drawCursor();
+            input.wasPinching = input.isPinching;
+
+            requestAnimationFrame(drawLoop);
+        }
+
+        function startGameUI(modeType, hasChallenge) {
+            if(!audioUnlocked && audioCtx.state === 'suspended') { audioCtx.resume(); audioUnlocked = true; }
+            if (window.speechSynthesis) {
+                const unlock = new SpeechSynthesisUtterance('');
+                unlock.volume = 0;
+                window.speechSynthesis.speak(unlock);
+            }
+            playSound('pop');
+            
+            currentSelectedChallenge = hasChallenge;
+
+            // Generate 10 kalimat secara dinamis (tanpa pengulangan)
+            questionsOrder = [];
+            currentBank = getBank(currentLang);
+            const shuffled = [...currentBank].sort(() => Math.random() - 0.5);
+            for (let i = 0; i < maxQuestions; i++) {
+                let numParts = modeType;
+                if (modeType === 'mix') numParts = Math.random() > 0.5 ? 3 : 4;
+                const src = shuffled[i % shuffled.length];
+                const parts = spokRoles.slice(0, numParts).map((r, ri) => ({ key: r.key, label: roleText[currentLang].labels[ri], letter: roleText[currentLang].letters[ri], color: r.color, text: src[r.key] }));
+                questionsOrder.push({
+                    source: src,
+                    emoji: src.emoji,
+                    parts: parts,
+                    sentence: parts.map(p => p.text).join(' ') + '.'
+                });
+            }
+
+            let modeLabel = modeType === 'mix' ? "Campuran" : (modeType === 3 ? "S-P-O" : "S-P-O-K");
+            modeLabel += hasChallenge ? " + Pengecoh 🧩" : "";
+
+            currentTargetIndex = 0;
+            score = 0;
+            document.getElementById('scoreDisplay').innerText = `0 / ${questionsOrder.length}`;
+            document.getElementById('modeTitle').innerText = modeLabel;
+            
+            mainMenu.classList.add('hidden');
+            uiOverlay.classList.remove('hidden');
+            gameState = 'playing';
+            
+            // Muat pertanyaan pertama (0) dan buat wadahnya
+            loadQuestion(0);
+        }
+
+        function backToMenu() {
+            gameState = 'menu';
+            uiOverlay.classList.add('hidden');
+            mainMenu.classList.remove('hidden');
+            bubbles = [];
+            targetSlots = [];
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (gameState === 'playing' && questionsOrder.length > 0) {
+                createSlots(questionsOrder[currentTargetIndex]);
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function checkReadyState() {
+            loadingText.innerText = `Menyiapkan Kecerdasan Buatan (${aiModelsLoaded}/2)...`;
+            if (aiModelsLoaded >= 2) {
+                loadingText.innerText = "Selesai! Mulai Kamera...";
+                startCamera();
+            }
+        }
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        
+        hands.onResults((results) => {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                if (!input.isHandDetected) {
+                    input.isHandDetected = true;
+                    statusIndicator.style.opacity = '0'; 
+                }
+                currentHandLandmarks = results.multiHandLandmarks[0];
+                const indexFinger = currentHandLandmarks[8];
+                const thumb = currentHandLandmarks[4];
+                input.x = (1 - indexFinger.x) * canvas.width;
+                input.y = indexFinger.y * canvas.height;
+                const dist = Math.sqrt(Math.pow(indexFinger.x - thumb.x, 2) + Math.pow(indexFinger.y - thumb.y, 2));
+                input.isPinching = dist < 0.08; 
+            } else {
+                if (input.isHandDetected) {
+                    input.isHandDetected = false;
+                    statusIndicator.style.opacity = '1'; 
+                    input.isPinching = false;
+                }
+                currentHandLandmarks = null;
+            }
+        });
+
+        const segmentation = new SelfieSegmentation({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`});
+        segmentation.setOptions({ modelSelection: 1 });
+        
+        segmentation.onResults((results) => {
+            currentSegmentationMask = results.segmentationMask;
+        });
+
+        async function initializeAI() {
+            try {
+                await hands.initialize();
+                aiModelsLoaded++;
+                checkReadyState();
+                
+                await segmentation.initialize();
+                aiModelsLoaded++;
+                checkReadyState();
+            } catch(e) {
+                console.error("AI Error:", e);
+                loadingText.innerText = "Gagal memuat AI. Muat ulang halaman.";
+                loadingText.style.color = "#FF3B30";
+            }
+        }
+        
+        let lastVideoTime = 0;
+        let isProcessingFrame = false;
+
+        async function processVideoFrames() {
+            if (videoElement.readyState >= 2 && videoElement.currentTime !== lastVideoTime && !isProcessingFrame) {
+                lastVideoTime = videoElement.currentTime;
+                isProcessingFrame = true;
+
+                if (aiModelsLoaded >= 2) {
+                    try {
+                        await segmentation.send({image: videoElement});
+                        await hands.send({image: videoElement});
+                    } catch (err) {
+                        console.warn("AI Frame Skip:", err);
+                    }
+                }
+                isProcessingFrame = false;
+            }
+            requestAnimationFrame(processVideoFrames);
+        }
+
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } })
+                .then((stream) => {
+                    videoElement.srcObject = stream;
+                    videoElement.onloadedmetadata = () => {
+                        videoElement.play();
+                        processVideoFrames(); 
+                        
+                        loadingScreen.style.opacity = '0';
+                        setTimeout(() => {
+                            loadingScreen.style.display = 'none';
+                            backToMenu(); 
+                            drawLoop();   
+                        }, 500);
+                    };
+                }).catch(err => {
+                    console.error("Camera error:", err);
+                    loadingScreen.innerHTML = "<h2 class='text-3xl font-bold text-red-500'>Kamera Tidak Ditemukan!</h2><p class='text-white mt-2'>Game butuh kamera untuk AR.</p>";
+                });
+        }
+
+        initializeAI();
+
+        function handlePointerDown(e) {
+            e.preventDefault();
+            input.x = e.clientX || (e.touches && e.touches[0].clientX);
+            input.y = e.clientY || (e.touches && e.touches[0].clientY);
+            input.isPinching = true;
+        }
+        function handlePointerMove(e) {
+            e.preventDefault();
+            input.x = e.clientX || (e.touches && e.touches[0].clientX);
+            input.y = e.clientY || (e.touches && e.touches[0].clientY);
+        }
+        function handlePointerUp(e) {
+            e.preventDefault();
+            input.isPinching = false;
+        }
+
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+        canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
+        canvas.addEventListener('touchmove', handlePointerMove, {passive: false});
+        window.addEventListener('touchend', handlePointerUp);
+
+    </script>
+</body>
+</html>
