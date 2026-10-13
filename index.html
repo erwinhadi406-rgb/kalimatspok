@@ -11,7 +11,6 @@
     <!-- MediaPipe Hands & Selfie Segmentation -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
     
     <style>
         body, html {
@@ -99,8 +98,8 @@
     <!-- Loading Screen (Menunggu AI Dimuat) -->
     <div id="loadingScreen">
         <div class="loader mb-6"></div>
-        <h2 class="text-3xl font-extrabold text-white drop-shadow-lg text-center px-4">Membangun Taman Pintar...</h2>
-        <p class="text-white mt-3 font-semibold text-lg text-center px-4" id="loadingText">Menyiapkan Kamera dan Kecerdasan Buatan (0/2)</p>
+        <h2 class="text-3xl font-extrabold text-white drop-shadow-lg text-center px-4">Menyiapkan Kamera...</h2>
+        <p class="text-white mt-3 font-semibold text-lg text-center px-4" id="loadingText">Menyiapkan Kamera dan Pelacak Tangan (0/1)</p>
     </div>
 
     <!-- Menu Utama -->
@@ -167,23 +166,14 @@
     </div>
 
     <script>
-        // Deteksi mode: layar sentuh (IFP/tablet) => tanpa kamera & AI ("Taman Pintar" dilewati)
-        // Paksa dengan ?touch=1 (mode sentuh) atau ?ar=1 (mode kamera AR)
-        const urlParams = new URLSearchParams(location.search);
-        const isTouchDevice = (navigator.maxTouchPoints || 0) > 0 &&
-            !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-        const touchOnly = urlParams.get('touch') === '1' || (isTouchDevice && urlParams.get('ar') !== '1');
-
-        // Shim: jika library MediaPipe tidak termuat, script tetap jalan
-        function makeStub(name) {
-            return function () {
-                this.setOptions = () => {}; this.onResults = () => {};
-                this.send = () => Promise.resolve();
-                this.initialize = () => Promise.reject(new Error(name + ' tidak termuat'));
-            };
-        }
-        if (typeof Hands === 'undefined') window.Hands = makeStub('Hands');
-        if (typeof SelfieSegmentation === 'undefined') window.SelfieSegmentation = makeStub('SelfieSegmentation');
+        // ?touch=1 => paksa mode sentuh tanpa kamera. Default: kamera AR.
+        const touchOnly = new URLSearchParams(location.search).get('touch') === '1';
+        // Jika library MediaPipe tidak termuat, script tetap jalan
+        if (typeof Hands === 'undefined') window.Hands = function () {
+            this.setOptions = () => {}; this.onResults = () => {};
+            this.send = () => Promise.resolve();
+            this.initialize = () => Promise.reject(new Error('Hands tidak termuat'));
+        };
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -1004,7 +994,8 @@
             ctx.direction = currentLang === 'ar' ? 'rtl' : 'ltr';
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            drawVirtualGarden();
+            ctx.fillStyle = '#1f2937';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             if (videoElement.readyState === 4) {
                 const vidAspect = videoElement.videoWidth / videoElement.videoHeight;
@@ -1020,33 +1011,14 @@
                     drawY = (drawH - canvas.height) / 2;
                 }
 
-                if (currentSegmentationMask) {
-                    personCanvas.width = canvas.width;
-                    personCanvas.height = canvas.height;
-                    personCtx.clearRect(0, 0, personCanvas.width, personCanvas.height);
-
-                    personCtx.save();
-                    personCtx.translate(personCanvas.width, 0);
-                    personCtx.scale(-1, 1);
-                    
-                    personCtx.globalCompositeOperation = 'source-over';
-                    personCtx.drawImage(currentSegmentationMask, -drawX, -drawY, drawW, drawH);
-                    
-                    personCtx.globalCompositeOperation = 'source-in';
-                    personCtx.drawImage(videoElement, -drawX, -drawY, drawW, drawH);
-                    personCtx.restore(); 
-
-                    ctx.globalCompositeOperation = 'source-over';
-                    ctx.drawImage(personCanvas, 0, 0);
-                } else {
-                    ctx.save();
-                    ctx.translate(canvas.width, 0);
-                    ctx.scale(-1, 1);
-                    ctx.globalCompositeOperation = 'source-over';
-                    ctx.globalAlpha = 0.2; 
-                    ctx.drawImage(videoElement, -drawX, -drawY, drawW, drawH);
-                    ctx.restore();
-                }
+                // Kamera penuh sebagai latar (tanpa taman)
+                ctx.save();
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1.0;
+                ctx.drawImage(videoElement, -drawX, -drawY, drawW, drawH);
+                ctx.restore();
             }
 
             ctx.globalCompositeOperation = 'source-over';
@@ -1174,8 +1146,8 @@
         resizeCanvas();
 
         function checkReadyState() {
-            loadingText.innerText = `Menyiapkan Kecerdasan Buatan (${aiModelsLoaded}/2)...`;
-            if (aiModelsLoaded >= 2) {
+            loadingText.innerText = `Menyiapkan Pelacak Tangan (${aiModelsLoaded}/1)...`;
+            if (aiModelsLoaded >= 1) {
                 loadingText.innerText = "Selesai! Mulai Kamera...";
                 startCamera();
             }
@@ -1207,25 +1179,14 @@
             }
         });
 
-        const segmentation = new SelfieSegmentation({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`});
-        segmentation.setOptions({ modelSelection: 1 });
-        
-        segmentation.onResults((results) => {
-            currentSegmentationMask = results.segmentationMask;
-        });
-
         async function initializeAI() {
             try {
                 await hands.initialize();
                 aiModelsLoaded++;
                 checkReadyState();
-                
-                await segmentation.initialize();
-                aiModelsLoaded++;
-                checkReadyState();
             } catch(e) {
                 console.error("AI Error:", e);
-                startTouchMode(); // AI gagal dimuat: lanjut dengan mode sentuh
+                startTouchMode(); // pelacak tangan gagal dimuat: lanjut mode sentuh
             }
         }
         
@@ -1237,9 +1198,8 @@
                 lastVideoTime = videoElement.currentTime;
                 isProcessingFrame = true;
 
-                if (aiModelsLoaded >= 2) {
+                if (aiModelsLoaded >= 1) {
                     try {
-                        await segmentation.send({image: videoElement});
                         await hands.send({image: videoElement});
                     } catch (err) {
                         console.warn("AI Frame Skip:", err);
@@ -1282,7 +1242,7 @@
                     };
                 }).catch(err => {
                     console.error("Camera error:", err);
-                    startTouchMode(); // kamera tidak ada/ditolak: lanjut dengan mode sentuh
+                    startTouchMode(); // kamera tidak ada/ditolak: lanjut mode sentuh
                 });
         }
 
@@ -1300,7 +1260,7 @@
             input.y = e.clientY || (e.touches && e.touches[0].clientY);
         }
         function handlePointerUp(e) {
-            // Jangan preventDefault di luar canvas: itu membatalkan 'click' tombol menu di layar sentuh (IFP)
+            // preventDefault di luar canvas membatalkan 'click' tombol menu di layar sentuh (IFP)
             if (e.target === canvas && e.cancelable) e.preventDefault();
             input.isPinching = false;
         }
