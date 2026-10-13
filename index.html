@@ -134,6 +134,10 @@
                 🌀 Campuran + Pengecoh 🧩
             </button>
         </div>
+        <div id="camNote" class="hidden mt-5 max-w-3xl w-full bg-yellow-300 text-gray-900 rounded-2xl px-4 py-3 border-4 border-white shadow-lg text-center font-bold text-sm md:text-base">
+            <div>📷 <span id="camNoteText"></span></div>
+            <button onclick="retryCamera()" class="mt-2 bg-gray-900 text-white px-5 py-2 rounded-xl font-bold hover:bg-gray-700 active:bg-black">Coba aktifkan kamera lagi</button>
+        </div>
     </div>
 
     <!-- Video Element (Tersembunyi, diproses di Canvas) -->
@@ -1186,7 +1190,7 @@
                 checkReadyState();
             } catch(e) {
                 console.error("AI Error:", e);
-                startTouchMode(); // pelacak tangan gagal dimuat: lanjut mode sentuh
+                startTouchMode('Pelacak tangan gagal dimuat (cek koneksi internet IFP).');
             }
         }
         
@@ -1214,24 +1218,72 @@
         function startLoop() { if (loopRunning) return; loopRunning = true; drawLoop(); }
 
         let touchModeStarted = false;
-        function startTouchMode() {
+        let camTimer = null;
+        let defaultHint = null;
+
+        function camErrText(err) {
+            const n = (err && err.name) || '';
+            const inFrame = window.self !== window.top;
+            if (n === 'NotAllowedError' || n === 'PermissionDeniedError' || n === 'SecurityError')
+                return 'Izin kamera ditolak/diblokir. Izinkan kamera untuk situs ini di pengaturan browser IFP, lalu tekan tombol di bawah.' +
+                       (inFrame ? ' (Halaman ini ditanam di iframe: tambahkan allow="camera" pada iframe-nya.)' : '');
+            if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'Kamera tidak ditemukan di perangkat ini.';
+            if (n === 'NotReadableError' || n === 'TrackStartError') return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.';
+            return 'Kamera gagal diaktifkan' + (n ? ' (' + n + ')' : '') + '.';
+        }
+
+        function setCamNote(msg) {
+            const box = document.getElementById('camNote');
+            if (!box) return;
+            document.getElementById('camNoteText').innerText = msg + ' Sementara ini game bisa dimainkan dengan sentuhan jari.';
+            box.classList.remove('hidden');
+        }
+
+        function camOK() {
+            clearTimeout(camTimer);
+            const box = document.getElementById('camNote');
+            if (box) box.classList.add('hidden');
+            statusIndicator.style.display = '';
+            const hint = document.querySelector('#mainMenu p');
+            if (hint && defaultHint) hint.innerText = defaultHint;
+        }
+
+        function retryCamera() {
+            // pelacak tangan belum termuat -> muat ulang halaman; sudah termuat -> minta kamera lagi (dari klik = izin lebih mudah muncul)
+            if (aiModelsLoaded >= 1) startCamera(); else location.reload();
+        }
+
+        function startTouchMode(reason) {
+            if (reason) setCamNote(reason);
             if (touchModeStarted || loopRunning) return;
             touchModeStarted = true;
             statusIndicator.style.display = 'none';
             const hint = document.querySelector('#mainMenu p');
-            if (hint) hint.innerText = 'Sentuh kata yang melayang, lalu geser ke wadah Subjek, Predikat, Objek, dan Keterangan!';
+            if (hint) {
+                defaultHint = hint.innerText;
+                hint.innerText = 'Sentuh kata yang melayang, lalu geser ke wadah Subjek, Predikat, Objek, dan Keterangan!';
+            }
             loadingScreen.style.display = 'none';
             backToMenu();
             startLoop();
         }
 
         function startCamera() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                startTouchMode(window.isSecureContext
+                    ? 'Browser IFP ini tidak mendukung akses kamera.'
+                    : 'Kamera hanya bisa jalan di alamat HTTPS (aman). Alamat halaman ini bukan HTTPS.');
+                return;
+            }
+            clearTimeout(camTimer);
+            camTimer = setTimeout(() => startTouchMode('Kamera tidak merespons (izin kamera kemungkinan diblokir oleh browser/aplikasi IFP).'), 12000);
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } })
                 .then((stream) => {
                     videoElement.srcObject = stream;
                     videoElement.onloadedmetadata = () => {
                         videoElement.play();
-                        processVideoFrames(); 
+                        processVideoFrames();
+                        camOK(); 
                         
                         loadingScreen.style.opacity = '0';
                         setTimeout(() => {
@@ -1242,7 +1294,7 @@
                     };
                 }).catch(err => {
                     console.error("Camera error:", err);
-                    startTouchMode(); // kamera tidak ada/ditolak: lanjut mode sentuh
+                    clearTimeout(camTimer); startTouchMode(camErrText(err));
                 });
         }
 
