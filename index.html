@@ -331,7 +331,10 @@
 
         // Ucapkan teks
         function speakText(text, lang = 'id-ID', rate = 0.8) {
-            if (!ttsReady || !window.speechSynthesis) return;
+          try { speakTextRaw(text, lang, rate); } catch (e) { console.warn('tts', e); }
+        }
+        function speakTextRaw(text, lang = 'id-ID', rate = 0.8) {
+            if (!ttsReady || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
             window.speechSynthesis.cancel();
             
             const utter = new SpeechSynthesisUtterance(text);
@@ -366,6 +369,9 @@
         }
 
         function playSound(type) {
+          try { playSoundRaw(type); } catch (e) { console.warn('sound', e); }
+        }
+        function playSoundRaw(type) {
             if(audioCtx.state === 'suspended') return;
             const osc = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
@@ -959,7 +965,24 @@
             ctx.restore();
         }
 
+        function showErr(e) {
+            let d = document.getElementById('errBox');
+            if (!d) {
+                d = document.createElement('div');
+                d.id = 'errBox';
+                d.style.cssText = 'position:fixed;left:0;bottom:0;z-index:999;background:rgba(0,0,0,.8);color:#ff8;font:14px monospace;padding:8px;max-width:100%;pointer-events:none';
+                document.body.appendChild(d);
+            }
+            d.textContent = 'ERR: ' + (e && e.message ? e.message : e);
+        }
+        window.addEventListener('error', ev => showErr(ev.message));
+
         function drawLoop() {
+            try { drawLoopBody(); } catch (e) { console.error(e); showErr(e); }
+            requestAnimationFrame(drawLoop);
+        }
+
+        function drawLoopBody() {
             ctx.direction = currentLang === 'ar' ? 'rtl' : 'ltr';
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -1061,17 +1084,22 @@
 
             if (gameState === 'playing') drawCursor();
             input.wasPinching = input.isPinching;
-
-            requestAnimationFrame(drawLoop);
         }
 
         function startGameUI(modeType, hasChallenge) {
-            if(!audioUnlocked && audioCtx.state === 'suspended') { audioCtx.resume(); audioUnlocked = true; }
-            if (window.speechSynthesis) {
-                const unlock = new SpeechSynthesisUtterance('');
-                unlock.volume = 0;
-                window.speechSynthesis.speak(unlock);
-            }
+            try { startGameUIRaw(modeType, hasChallenge); } catch (e) { console.error(e); showErr(e); }
+        }
+        function startGameUIRaw(modeType, hasChallenge) {
+            try {
+                if(!audioUnlocked && audioCtx.state === 'suspended') { audioCtx.resume(); audioUnlocked = true; }
+            } catch (e) { console.warn('audio resume', e); }
+            try {
+                if (window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined') {
+                    const unlock = new SpeechSynthesisUtterance('');
+                    unlock.volume = 0;
+                    window.speechSynthesis.speak(unlock);
+                }
+            } catch (e) { console.warn('tts unlock', e); }
             playSound('pop');
             
             currentSelectedChallenge = hasChallenge;
