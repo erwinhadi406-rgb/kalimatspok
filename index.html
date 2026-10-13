@@ -167,6 +167,24 @@
     </div>
 
     <script>
+        // Deteksi mode: layar sentuh (IFP/tablet) => tanpa kamera & AI ("Taman Pintar" dilewati)
+        // Paksa dengan ?touch=1 (mode sentuh) atau ?ar=1 (mode kamera AR)
+        const urlParams = new URLSearchParams(location.search);
+        const isTouchDevice = (navigator.maxTouchPoints || 0) > 0 &&
+            !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+        const touchOnly = urlParams.get('touch') === '1' || (isTouchDevice && urlParams.get('ar') !== '1');
+
+        // Shim: jika library MediaPipe tidak termuat, script tetap jalan
+        function makeStub(name) {
+            return function () {
+                this.setOptions = () => {}; this.onResults = () => {};
+                this.send = () => Promise.resolve();
+                this.initialize = () => Promise.reject(new Error(name + ' tidak termuat'));
+            };
+        }
+        if (typeof Hands === 'undefined') window.Hands = makeStub('Hands');
+        if (typeof SelfieSegmentation === 'undefined') window.SelfieSegmentation = makeStub('SelfieSegmentation');
+
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const videoElement = document.getElementById('webcam');
@@ -1207,8 +1225,7 @@
                 checkReadyState();
             } catch(e) {
                 console.error("AI Error:", e);
-                loadingText.innerText = "Gagal memuat AI. Muat ulang halaman.";
-                loadingText.style.color = "#FF3B30";
+                startTouchMode(); // AI gagal dimuat: lanjut dengan mode sentuh
             }
         }
         
@@ -1233,6 +1250,21 @@
             requestAnimationFrame(processVideoFrames);
         }
 
+        let loopRunning = false;
+        function startLoop() { if (loopRunning) return; loopRunning = true; drawLoop(); }
+
+        let touchModeStarted = false;
+        function startTouchMode() {
+            if (touchModeStarted || loopRunning) return;
+            touchModeStarted = true;
+            statusIndicator.style.display = 'none';
+            const hint = document.querySelector('#mainMenu p');
+            if (hint) hint.innerText = 'Sentuh kata yang melayang, lalu geser ke wadah Subjek, Predikat, Objek, dan Keterangan!';
+            loadingScreen.style.display = 'none';
+            backToMenu();
+            startLoop();
+        }
+
         function startCamera() {
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } })
                 .then((stream) => {
@@ -1245,16 +1277,16 @@
                         setTimeout(() => {
                             loadingScreen.style.display = 'none';
                             backToMenu(); 
-                            drawLoop();   
+                            startLoop();
                         }, 500);
                     };
                 }).catch(err => {
                     console.error("Camera error:", err);
-                    loadingScreen.innerHTML = "<h2 class='text-3xl font-bold text-red-500'>Kamera Tidak Ditemukan!</h2><p class='text-white mt-2'>Game butuh kamera untuk AR.</p>";
+                    startTouchMode(); // kamera tidak ada/ditolak: lanjut dengan mode sentuh
                 });
         }
 
-        initializeAI();
+        if (touchOnly) startTouchMode(); else initializeAI();
 
         function handlePointerDown(e) {
             e.preventDefault();
@@ -1268,7 +1300,8 @@
             input.y = e.clientY || (e.touches && e.touches[0].clientY);
         }
         function handlePointerUp(e) {
-            e.preventDefault();
+            // Jangan preventDefault di luar canvas: itu membatalkan 'click' tombol menu di layar sentuh (IFP)
+            if (e.target === canvas && e.cancelable) e.preventDefault();
             input.isPinching = false;
         }
 
@@ -1278,6 +1311,7 @@
         canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
         canvas.addEventListener('touchmove', handlePointerMove, {passive: false});
         window.addEventListener('touchend', handlePointerUp);
+        window.addEventListener('touchcancel', handlePointerUp);
 
     </script>
 </body>
